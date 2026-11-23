@@ -1,0 +1,29 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Payment {
+  id        String   @id
+  name      String
+  email     String
+  amount    Int
+  currency  String   @db.VarChar(3)
+  status    String   @db.VarChar(16)
+  method    String   @db.VarChar(24)
+  brand     String?  @db.VarChar(16)
+  last4     String?  @db.VarChar(4)
+  createdAt DateTime @map("created_at")
+
+  @@index([createdAt, id], map: "payment_created_id_idx")
+  @@index([status, createdAt, id], map: "payment_status_created_id_idx")
+  @@index([method, createdAt, id], map: "payment_method_created_id_idx")
+  @@index([amount, id], map: "payment_amount_id_idx")
+  @@index([email], map: "payment_email_idx")
+  @@map("payments")
+}
