@@ -32,3 +32,24 @@ test("status tabs, advanced filters, columns, and pagination are interactive", a
 
   await page.screenshot({ path: "test-results/payments-controls.png", fullPage: true });
 });
+
+test("pagination, copy, navigation and browser health", async ({ page, context }) => {
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto("/");
+  await expect(page.locator("tbody tr").first()).toBeVisible();
+  await expect(page.getByLabel("Next page")).toBeEnabled();
+  const firstId = await page.locator("tbody tr").first().getByRole("button", { name: /^Copy / }).getAttribute("aria-label");
+  await page.locator("tbody tr").first().getByRole("button", { name: /^Copy / }).click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(firstId?.slice(5));
+  await page.getByLabel("Next page").click();
+  await expect(page.locator(".page-count")).toContainText("2 /");
+  await expect(page.locator("tbody tr").first().getByRole("button", { name: /^Copy / })).not.toHaveAttribute("aria-label", firstId!);
+  await page.getByRole("link", { name: "Home" }).click();
+  await expect(page).toHaveURL(/\/home$/);
+  await page.goBack();
+  await expect(page.getByRole("heading", { name: "Payments" })).toBeVisible();
+  expect(errors).toEqual([]);
+});

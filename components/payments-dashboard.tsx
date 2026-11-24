@@ -106,7 +106,10 @@ export function PaymentsDashboard() {
   }, [query, statuses, methods, currencies, range, min, max, sort, page, pageSize]);
 
   const setAndReset = <T,>(setter: (value: T) => void, value: T) => { setter(value); setPage(0); };
-  const clientRows = fallbackFiltered.slice(page * pageSize, page * pageSize + pageSize);
+  const clientRows = useMemo(
+    () => fallbackFiltered.slice(page * pageSize, page * pageSize + pageSize),
+    [fallbackFiltered, page, pageSize],
+  );
   // Advanced-only computed fields are deliberately evaluated locally, while the required filters remain server queried.
   const usesClientAdvancedFilter = balanceTypes.length > 0 || availableRange !== "Any time";
   const total = usesClientAdvancedFilter ? fallbackFiltered.length : (serverData?.total ?? fallbackFiltered.length);
