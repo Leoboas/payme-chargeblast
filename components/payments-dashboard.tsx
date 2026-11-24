@@ -14,7 +14,7 @@ import {
   CreditCard, Download, Filter, LayoutGrid, Menu, MoreHorizontal, Plus,
   Search, Settings, SlidersHorizontal, X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { formatAmount, payments } from "@/lib/payments";
 import type { Payment, PaymentMethod, PaymentStatus } from "@/types/payment";
 
@@ -53,6 +53,7 @@ export function PaymentsDashboard() {
   const [copied, setCopied] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
+  const requestVersion = useRef(0);
   const [filterPanel, setFilterPanel] = useState<FilterPanel>("menu");
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const [wrapCells, setWrapCells] = useState(false);
@@ -81,19 +82,25 @@ export function PaymentsDashboard() {
 
   useEffect(() => {
     const controller = new AbortController();
+    const version = ++requestVersion.current;
     const params = new URLSearchParams({ q: query, range, sort, page: String(page), pageSize: String(pageSize) });
     statuses.forEach(value => params.append("status", value));
     methods.forEach(value => params.append("method", value));
     currencies.forEach(value => params.append("currency", value));
     if (min) params.set("min", min);
     if (max) params.set("max", max);
-    fetch(`/api/payments?${params}`, { signal: controller.signal })
+    setLoading(true);
+    setError(false);
+    setServerData(null);
+    fetch(`/api/payments?${params}`, { signal: controller.signal, cache: "no-store", headers: { "Cache-Control": "no-cache" } })
       .then(response => response.ok ? response.json() : Promise.reject(new Error("Unable to load payments")))
       .then((data: { payments: Array<Omit<Payment, "created"> & { created: string }>; total: number }) => {
+        if (version !== requestVersion.current) return;
         setServerData({ total: data.total, payments: data.payments.map(payment => ({ ...payment, created: new Date(payment.created) })) });
         setError(false);
+        setLoading(false);
       })
-      .catch(() => { if (!controller.signal.aborted) setError(true); });
+      .catch(() => { if (!controller.signal.aborted && version === requestVersion.current) { setError(true); setLoading(false); } });
     return () => controller.abort();
   }, [query, statuses, methods, currencies, range, min, max, sort, page, pageSize]);
 
