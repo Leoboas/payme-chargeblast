@@ -53,3 +53,14 @@ If `DATABASE_URL` is not set, the `/api/payments` endpoint explicitly uses the d
 - Empty, loading, and retry-ready error state components
 
 No real payment credentials, customer data, or Stripe API calls are used.
+
+## API documentation and security
+
+- OpenAPI contract: `/api/openapi.json`
+- Human-readable API guide: `/api-docs`
+- The API is read-only and validates all query parameters through Zod.
+- Pagination is allowlisted to 25, 50, or 100 rows; sort values are allowlisted.
+- Prisma parameterizes database requests; the fixture fallback performs no SQL.
+- Security response headers include CSP, `X-Content-Type-Options`, frame protection, referrer policy and permissions policy.
+
+`npm audit --omit=dev` currently reports transitive advisories in Next.js, Prisma and Zod that require breaking major upgrades. They are documented as residual dependency risk; no `--force` upgrade was applied before delivery.
