@@ -1,10 +1,19 @@
-node_modules
-.next
-.env
-.env.local
-*.log
+# Dependencies and framework output
+node_modules/
+.next/
+out/
+coverage/
+test-results/
+playwright-report/
 *.tsbuildinfo
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+
+# Local tooling and temporary reference material
+.vercel/
 .video-reference/
 .video-feedback/
-
-.vercel
+*.log

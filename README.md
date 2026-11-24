@@ -20,12 +20,33 @@ Open `http://localhost:3000`.
 
 ## Architecture
 
-- `app/` contains the Next.js App Router shell and global styling.
-- `components/payments-dashboard.tsx` contains the responsive dashboard, controls and table.
-- `lib/payments.ts` generates 800 deterministic, fictitious payments locally.
-- `types/payment.ts` provides strict payment data types.
-- `app/api/payments/route.ts` exposes validated, server-side paginated queries.
-- `prisma/` contains the PostgreSQL schema, migration and deterministic seed.
+```text
+Browser (Payments dashboard)
+          │ GET /api/payments — typed query parameters
+          ▼
+Next.js route handler
+          │ parseQuery (Zod allowlists)
+          ▼
+PaymentRepository contract
+   ┌──────┴─────────────────────┐
+   ▼                            ▼
+JsonPaymentRepository      PostgresPaymentRepository
+data/payments.json         Prisma + PostgreSQL (optional)
+   │                            │
+   └────────── PaymentPage ─────┘
+                │
+                ▼
+        Paginated table UI
+```
+
+- `app/` — Next.js App Router, API routes and styles.
+- `components/` — responsive Stripe-inspired workspace and Payments UI.
+- `data/payments.json` — canonical, fictional demo fixture with 800 records.
+- `lib/payments.ts` — validates the JSON fixture and maps it to the frontend model.
+- `lib/payment-query.ts` — Zod query parsing, sorting/pagination and repository adapters.
+- `types/` — strict public payment types.
+- `prisma/` — optional PostgreSQL schema, migration and deterministic seed.
+- `tests/` — unit and browser regression tests.
 
 ## Data source: JSON by default
 
