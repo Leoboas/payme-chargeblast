@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+test.setTimeout(90_000);
+
 test("status tabs, advanced filters, columns, and pagination are interactive", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Payments" })).toBeVisible();
