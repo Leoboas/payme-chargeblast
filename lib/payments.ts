@@ -1,35 +1,31 @@
+import { z } from "zod";
+import paymentFixture from "@/data/payments.json";
 import type { Payment, PaymentMethod, PaymentStatus } from "@/types/payment";
 
-const names = ["Ana Martins", "Lucas Rocha", "Maya Thompson", "Diego Alves", "Olivia Chen", "Rafael Costa", "Emma Wilson", "Noah Santos", "Sofia Lima", "Theo Walker", "Camila Ribeiro", "Arthur Lee"];
-const statuses: PaymentStatus[] = ["Succeeded", "Succeeded", "Succeeded", "Pending", "Failed", "Refunded"];
-const methods: PaymentMethod[] = ["Card", "Card", "Card", "PIX", "Bank transfer", "Apple Pay"];
-const currencies: Payment["currency"][] = ["USD", "BRL", "EUR", "GBP"];
-const brands: NonNullable<Payment["brand"]>[] = ["Visa", "Mastercard", "Amex"];
-const fixtureNow = new Date("2026-11-23T12:00:00.000Z");
+const paymentFixtureSchema = z.array(z.object({
+  id: z.string().regex(/^pi_[A-Za-z0-9]+$/),
+  customer: z.object({ name: z.string().min(1), email: z.string().email() }),
+  amount: z.number().int().nonnegative(),
+  currency: z.enum(["USD", "BRL", "EUR", "GBP"]),
+  status: z.enum(["Succeeded", "Pending", "Failed", "Refunded"]),
+  method: z.enum(["Card", "PIX", "Bank transfer", "Apple Pay"]),
+  brand: z.enum(["Visa", "Mastercard", "Amex"]).optional(),
+  last4: z.string().regex(/^\d{4}$/).optional(),
+  created: z.string().datetime(),
+}).superRefine((payment, context) => {
+  const needsCardDetails = payment.method === "Card" || payment.method === "Apple Pay";
+  if (needsCardDetails && (!payment.brand || !payment.last4)) context.addIssue({ code: z.ZodIssueCode.custom, message: "Card payments require brand and last4" });
+  if (!needsCardDetails && (payment.brand || payment.last4)) context.addIssue({ code: z.ZodIssueCode.custom, message: "Non-card payments cannot include card data" });
+}));
 
-function random(seed: number) {
-  const x = Math.sin(seed * 999) * 10000;
-  return x - Math.floor(x);
+export type PaymentFixtureRecord = z.infer<typeof paymentFixtureSchema>[number];
+
+export function loadJsonPayments(input: unknown): Payment[] {
+  return paymentFixtureSchema.parse(input).map(payment => ({ ...payment, status: payment.status as PaymentStatus, method: payment.method as PaymentMethod, created: new Date(payment.created) }));
 }
 
-export const payments: Payment[] = Array.from({ length: 800 }, (_, index) => {
-  const n = index + 1;
-  const method = methods[Math.floor(random(n + 5) * methods.length)];
-  const person = names[Math.floor(random(n + 17) * names.length)];
-  const dayOffset = Math.floor(random(n + 91) * 92);
-  const created = new Date(fixtureNow.getTime() - dayOffset * 86400000 - Math.floor(random(n + 99) * 86400000));
-  return {
-    id: `pi_3Q${String(700000 + n).padStart(8, "0")}payme`,
-    customer: { name: person, email: `${person.toLowerCase().replace(" ", ".")}+${n}@example.com` },
-    amount: Math.round((5 + random(n + 33) * 2495) * 100),
-    currency: currencies[Math.floor(random(n + 47) * currencies.length)],
-    status: statuses[Math.floor(random(n + 61) * statuses.length)],
-    method,
-    brand: method === "Card" || method === "Apple Pay" ? brands[Math.floor(random(n + 70) * brands.length)] : undefined,
-    last4: method === "Card" || method === "Apple Pay" ? String(1000 + Math.floor(random(n + 73) * 8999)) : undefined,
-    created
-  };
-});
+// Canonical demo source: local, checked in, and credential-free.
+export const payments = loadJsonPayments(paymentFixture);
 
 export function formatAmount(amount: number, currency: Payment["currency"]) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency, minimumFractionDigits: 2 }).format(amount / 100);

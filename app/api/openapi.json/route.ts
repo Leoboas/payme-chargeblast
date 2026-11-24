@@ -21,7 +21,7 @@ export function GET() {
             queryParameter("page", { type: "integer", minimum: 0, default: 0 }), queryParameter("pageSize", { type: "integer", enum: [25, 50, 100], default: 25 })
           ],
           responses: {
-            "200": { description: "Paginated payments", content: { "application/json": { schema: { type: "object", properties: { total: { type: "integer" }, source: { type: "string", enum: ["database", "fixture"] }, payments: { type: "array", items: { type: "object" } } } } } } },
+            "200": { description: "Paginated payments", content: { "application/json": { schema: { type: "object", properties: { total: { type: "integer" }, source: { type: "string", enum: ["json", "postgres"] }, payments: { type: "array", items: { type: "object" } } } } } } },
             "400": { description: "Invalid query parameters" }
           }
         }

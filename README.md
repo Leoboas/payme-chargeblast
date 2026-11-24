@@ -27,7 +27,15 @@ Open `http://localhost:3000`.
 - `app/api/payments/route.ts` exposes validated, server-side paginated queries.
 - `prisma/` contains the PostgreSQL schema, migration and deterministic seed.
 
-## PostgreSQL / Neon
+## Data source: JSON by default
+
+The public demo runs with `PAYMENTS_DATA_SOURCE=json` (also the default when the variable is omitted). Its canonical fixture is [data/payments.json](data/payments.json): 800 fictional, validated records. JSON mode does not read `DATABASE_URL`, load Prisma at runtime, connect to Neon, run migrations, or run a seed.
+
+To change demo data, edit a record in `data/payments.json` and restart development or rebuild/redeploy production; the JSON is bundled at build time. The API response includes `source: "json"`, which makes the selected source observable. Invalid records fail Zod validation rather than being silently repaired.
+
+`PAYMENTS_DATA_SOURCE=postgres` is an explicit optional mode. It uses the same query contract through `PostgresPaymentRepository` and requires `DATABASE_URL`. A missing or unavailable database returns a controlled API error; it never falls back to JSON while PostgreSQL mode is selected.
+
+## PostgreSQL / Neon (optional)
 
 Set the values in `.env.example` in a local `.env` file. `DATABASE_URL` must be a Neon pooled connection for runtime; `DIRECT_URL` must be the direct connection used by Prisma migrations.
 
@@ -41,7 +49,7 @@ The seed uses `createMany` with stable payment IDs and `skipDuplicates`, so it i
 
 The indexes mirror the dashboard access paths: date/status/method with date sorting, amount sorting, and email search. A standard view is intentionally not used: it would simplify neither this single-table read model nor its performance.
 
-If `DATABASE_URL` is not set, the `/api/payments` endpoint explicitly uses the deterministic fixture fallback. A configured database error returns an API error; it never becomes an empty result set.
+The query adapters implement the same `PaymentRepository` contract: `JsonPaymentRepository` and `PostgresPaymentRepository`. The frontend only consumes `/api/payments` and does not know which adapter is active.
 
 ## Features
 
@@ -63,4 +71,15 @@ No real payment credentials, customer data, or Stripe API calls are used.
 - Prisma parameterizes database requests; the fixture fallback performs no SQL.
 - Security response headers include CSP, `X-Content-Type-Options`, frame protection, referrer policy and permissions policy.
 
-`npm audit --omit=dev` currently reports transitive advisories in Next.js, Prisma and Zod that require breaking major upgrades. They are documented as residual dependency risk; no `--force` upgrade was applied before delivery.
+`npm audit --omit=dev --audit-level=high` reports 7 transitive advisories (6 high, 1 moderate) in Next.js/PostCSS, Prisma dependencies, and Zod. Available automated fixes require breaking major upgrades; no `--force` upgrade was applied before delivery.
+
+## Verification
+
+```bash
+npm run test
+npx tsc --noEmit
+npm run build
+npx playwright test
+```
+
+The JSON parser tests cover an edited fixture record and JSON operation with no `DATABASE_URL`. The compliance matrix, including deliberately untested PostgreSQL parity, is in [docs/chargeblast-compliance-audit.md](docs/chargeblast-compliance-audit.md).
