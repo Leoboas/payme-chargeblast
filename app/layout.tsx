@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./filter-popover.css";
 
 export const metadata: Metadata = {
   title: "Payme — Payments",

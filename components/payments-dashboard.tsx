@@ -12,7 +12,7 @@ const methodOptions: PaymentMethod[] = ["Card", "PIX", "Bank transfer", "Apple P
 type Sort = "created-desc" | "created-asc" | "amount-desc" | "amount-asc" | "status-asc" | "status-desc";
 
 function MultiSelect<T extends string>({ label, options, value, onChange }: { label: string; options: T[]; value: T[]; onChange: (value: T[]) => void }) {
-  return <Popover.Root><Popover.Trigger asChild><button className={`filter-button ${value.length ? "active" : ""}`}>{label}{value.length ? ` (${value.length})` : ""}<ChevronDown size={15}/></button></Popover.Trigger><Popover.Portal><Popover.Content className="filter-popover" align="start" sideOffset={8}>
+  return <Popover.Root><Popover.Trigger asChild><button className={`filter-button ${value.length ? "active" : ""}`}>{label}{value.length ? ` (${value.length})` : ""}<ChevronDown size={15}/></button></Popover.Trigger><Popover.Portal><Popover.Content className="filter-popover" side="bottom" align="start" sideOffset={8}>
     <div className="popover-title">Filter by {label.toLowerCase()}</div>{options.map(option => <label className="check-option" key={option}><input type="checkbox" checked={value.includes(option)} onChange={() => onChange(value.includes(option) ? value.filter(item => item !== option) : [...value, option])}/><span className="fake-check">{value.includes(option) && <Check size={12}/>}</span>{option}</label>)}
   </Popover.Content></Popover.Portal></Popover.Root>;
 }
