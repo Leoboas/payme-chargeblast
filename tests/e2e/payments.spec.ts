@@ -16,10 +16,10 @@ test("status tabs, advanced filters, columns, and pagination are interactive", a
   await page.getByRole("button", { name: "Currency" }).click();
   await page.locator(".advanced-popover").getByText("BRL", { exact: true }).click();
   await expect(page.getByRole("button", { name: "More filters" })).toHaveClass(/active/);
-  await page.locator(".advanced-popover").getByRole("button").first().click();
+  await page.getByRole("button", { name: "More filters" }).click();
   await page.getByRole("button", { name: "Type", exact: true }).click();
   await page.locator(".advanced-popover").getByText("Card", { exact: true }).click();
-  await page.locator(".advanced-popover").getByRole("button").first().click();
+  await page.getByRole("button", { name: "More filters" }).click();
   await page.getByRole("button", { name: "Created at", exact: true }).click();
   await page.locator(".advanced-popover").getByRole("combobox").selectOption("7 days");
   await expect(page.locator("tbody tr").first()).toContainText("Visa");
