@@ -11,6 +11,12 @@ describe("payments query security", () => {
     expect(page.payments.length).toBeLessThanOrEqual(25);
     expect(page.payments.every(payment => payment.status === "Succeeded" && payment.method === "Card")).toBe(true);
   });
+  it("filters the synthetic page by an approved currency", () => {
+    const query = parseQuery(new URLSearchParams("currency=BRL&range=Custom&pageSize=100"));
+    const page = queryFixtures(query);
+    expect(page.total).toBeGreaterThan(0);
+    expect(page.payments.every(payment => payment.currency === "BRL")).toBe(true);
+  });
   it("does not turn injection-shaped search into a database command", () => {
     const query = parseQuery(new URLSearchParams("q=' OR 1=1 --&range=Custom"));
     expect(queryFixtures(query).total).toBe(0);
