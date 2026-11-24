@@ -11,7 +11,7 @@
 | JSON/Postgres parity | Same 800 deterministic records in the fixture and Neon | Full field-for-field record comparison plus combined-filter query comparison | PASS | 800 JSON / 800 PostgreSQL / 0 differences; matching total and ordered page |
 | Visual Stripe comparison | Existing reference-driven layout and popovers | Screenshot captured; no fresh side-by-side comparison in this audit | NOT_TESTED | `tests/e2e/payments.spec.ts` |
 | Custom date range and selected filters | UTC date inputs, inclusive bounds, selected values and per-filter clearing | Query unit test and Playwright with PostgreSQL | PASS | `tests/payment-query.test.ts`, `tests/e2e/payments.spec.ts` |
-| Optional navigation, account menu and details | Sidebar has demo pages; account menu and details route are incomplete | Code review | PARTIAL | Customers/Balances are visual placeholders; details timeline is not implemented |
-| Optional URL filters and column resizing/reordering | Not implemented | Code review | NOT_IMPLEMENTED | CSV export covers the displayed page |
+| Optional navigation, account menu and details | Sidebar, top-bar search, demo account menu and payment details route | Playwright regression | PARTIAL | Customers/Balances are visual placeholders; status-change timestamps and metadata are not available |
+| Optional URL filters and column resizing/reordering | Shareable URL state and draggable/resizable columns | Playwright regression | PASS | Layout is not persisted; CSV export covers the displayed page |
 | Security checks and dependency audit | Zod validation, allowlists, headers, Next 16 and Prisma 7 | Unit tests, invalid parameters, injection-shaped search, `npm audit --omit=dev --audit-level=high` | PARTIAL | 0 production vulnerabilities; no penetration test performed |
 | Advanced balance/availability filters | Illustrative fields calculated from the local fixture | Code inspection | LIMITATION | Not queried from PostgreSQL; not real settlement data |

@@ -1,2 +1,17 @@
+"use client";
+
 import Link from "next/link";
-export default function ApiDocs() { return <main style={{ maxWidth: 860, margin: "48px auto", padding: "0 24px", fontFamily: "Arial, sans-serif", color: "#182230" }}><Link href="/" style={{ color: "#635bff" }}>← Back to Payme</Link><h1>Payme Payments API</h1><p>Read-only API backed by validated query parameters and synthetic demo data.</p><h2>GET /api/payments</h2><p>Filter by <code>q</code>, <code>status</code>, <code>method</code>, <code>range</code>, <code>min</code>, <code>max</code>, <code>sort</code>, <code>page</code> and <code>pageSize</code>.</p><p>Responses include only one requested page, its total matching count, and the active data source.</p><p><a href="/api/openapi.json">Open OpenAPI 3.0 JSON</a></p></main>; }
+import { useEffect, useRef } from "react";
+import "swagger-ui-dist/swagger-ui.css";
+
+export default function ApiDocs() {
+  const container = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    let active = true;
+    void import("swagger-ui-dist/swagger-ui-bundle.js").then(({ default: SwaggerUIBundle }) => {
+      if (active && container.current) SwaggerUIBundle({ domNode: container.current, url: "/api/openapi.json", deepLinking: true });
+    });
+    return () => { active = false; if (container.current) container.current.innerHTML = ""; };
+  }, []);
+  return <main className="api-docs"><Link href="/">← Back to Payme</Link><div ref={container}/></main>;
+}

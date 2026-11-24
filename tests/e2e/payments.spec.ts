@@ -15,7 +15,7 @@ test("status tabs, advanced filters, columns, and pagination are interactive", a
   await page.getByRole("button", { name: "All", exact: true }).click();
 
   await page.getByRole("button", { name: /More filters|\d+ filters?/ }).click();
-  await page.getByRole("button", { name: "Currency" }).click();
+  await page.locator(".advanced-popover").getByRole("button", { name: "Currency", exact: true }).click();
   await page.locator(".advanced-popover").getByText("BRL", { exact: true }).click();
   await expect(page.getByRole("button", { name: /More filters|\d+ filters?/ })).toHaveClass(/active/);
   await page.getByRole("button", { name: /More filters|\d+ filters?/ }).click();
@@ -39,7 +39,8 @@ test("status tabs, advanced filters, columns, and pagination are interactive", a
 test("pagination, copy, navigation and browser health", async ({ page, context }) => {
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
-  page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
+  page.on("console", message => { if (message.type() === "error") errors.push(`${message.text()} ${message.location().url}`); });
+  page.on("response", response => { if (response.status() === 404) errors.push(`404: ${new URL(response.url()).pathname}`); });
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.goto("/");
   await expect(page.locator("tbody tr").first()).toBeVisible();
@@ -89,4 +90,50 @@ test("shows selected filters and applies a custom date range", async ({ page }) 
   await expect(page.getByRole("button", { name: "Clear Created at filter" })).toContainText("2026-11-17");
   await page.getByRole("button", { name: "Clear Currency filter" }).click();
   await expect(page.getByRole("button", { name: "Clear Currency filter" })).toHaveCount(0);
+});
+
+test("shared filters, payment details, account menu and table layout", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await page.goto("/?range=Custom&from=2026-11-17&to=2026-11-17&status=Succeeded&currency=USD");
+  await expect(page.getByRole("button", { name: "Succeeded", exact: true })).toHaveClass(/selected/);
+  await expect(page.locator("tbody tr").first()).toBeVisible();
+  await page.getByRole("button", { name: "Account menu" }).click();
+  await expect(page.getByRole("link", { name: "Account settings" })).toBeVisible();
+  await page.getByRole("button", { name: "Account menu" }).click();
+  const header = page.getByRole("columnheader", { name: /Amount/ });
+  const oldWidth = await header.evaluate(element => element.getBoundingClientRect().width);
+  await page.getByRole("separator", { name: "Resize Amount column" }).focus();
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(() => header.evaluate(element => element.getBoundingClientRect().width)).toBeGreaterThan(oldWidth);
+  await page.getByRole("button", { name: "Drag Amount column" }).dragTo(page.getByRole("columnheader", { name: /Customer/ }));
+  const headings = await page.locator("thead th").allTextContents();
+  expect(headings.findIndex(value => value.includes("Amount"))).toBeLessThan(headings.findIndex(value => value.includes("Customer")));
+  const detailLink = page.locator("tbody tr").first().locator(".id-cell a");
+  const detailPath = await detailLink.getAttribute("href");
+  await detailLink.click();
+  await expect(page).toHaveURL(/\/payments\/pi_/);
+  await expect(page.getByRole("heading", { name: "Timeline" })).toBeVisible();
+  await expect(page.getByText("Status change time is not available in the demo data.")).toBeVisible();
+  const detailResponse = await page.request.get(`/api${detailPath}`);
+  expect(detailResponse.status()).toBe(200);
+  expect((await page.request.get("/api/payments/pi_nonexistent")).status()).toBe(404);
+  await page.goBack();
+  await expect(page).toHaveURL(/status=Succeeded/);
+  await expect(page.getByRole("button", { name: "Succeeded", exact: true })).toHaveClass(/selected/);
+  await page.getByLabel("Search from top bar").fill("example.com");
+  await page.getByRole("button", { name: "Submit top search" }).click();
+  await expect(page).toHaveURL(/q=example.com/);
+  expect(errors).toEqual([]);
+});
+
+test("Swagger UI loads the English OpenAPI contract", async ({ page }) => {
+  await page.goto("/api-docs");
+  await expect(page.locator(".swagger-ui")).toBeVisible();
+  await expect(page.getByText("Payme Payments API").first()).toBeVisible();
+  await expect(page.getByText("Get a payment")).toBeVisible();
+  const spec = await page.request.get("/api/openapi.json");
+  const document = await spec.json();
+  expect(document.paths["/api/payments/{id}"].get.responses["404"]).toBeTruthy();
+  expect(document.paths["/api/telemetry"].post).toBeTruthy();
 });

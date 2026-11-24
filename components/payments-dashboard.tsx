@@ -7,6 +7,8 @@ import {
   getCoreRowModel,
   useReactTable,
   type ColumnDef,
+  type ColumnOrderState,
+  type ColumnSizingState,
   type VisibilityState,
 } from "@tanstack/react-table";
 import {
@@ -17,6 +19,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatAmount, payments } from "@/lib/payments";
 import { reportClientError } from "@/lib/client-telemetry";
+import { TopBar } from "@/components/top-bar";
 import type { Payment, PaymentMethod, PaymentStatus } from "@/types/payment";
 
 const statusOptions: PaymentStatus[] = ["Succeeded", "Pending", "Failed", "Refunded"];
@@ -63,7 +66,48 @@ export function PaymentsDashboard() {
   const [filterPanel, setFilterPanel] = useState<FilterPanel>("menu");
   const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+  const [columnOrder, setColumnOrder] = useState<ColumnOrderState>([]);
+  const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
+  const draggingColumn = useRef<string | null>(null);
   const [wrapCells, setWrapCells] = useState(false);
+  const [urlReady, setUrlReady] = useState(false);
+  const skipUrlWrite = useRef(false);
+
+  useEffect(() => {
+    const restore = () => {
+      const params = new URLSearchParams(window.location.search);
+      const selected = <T extends string,>(key: string, options: readonly T[]) => params.getAll(key).filter((value): value is T => options.includes(value as T));
+      const allowedRange = ["Today", "7 days", "30 days", "Custom"];
+      const validDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value + "T00:00:00Z")) && new Date(value + "T00:00:00Z").toISOString().startsWith(value);
+      let restoredRange = params.get("range") ?? "30 days";
+      const from = params.get("from") ?? ""; const to = params.get("to") ?? "";
+      if (!allowedRange.includes(restoredRange) || (restoredRange === "Custom" && (!validDate(from) || !validDate(to) || from > to))) restoredRange = "30 days";
+      const minValue = params.get("min") ?? ""; const maxValue = params.get("max") ?? "";
+      const validAmount = (value: string) => value === "" || (Number.isFinite(Number(value)) && Number(value) >= 0);
+      const sortValue = params.get("sort") ?? "created-desc";
+      const pageValue = Number(params.get("page") ?? 0); const sizeValue = Number(params.get("pageSize") ?? 25);
+      skipUrlWrite.current = true;
+      setQuery((params.get("q") ?? "").slice(0, 120)); setStatuses(selected("status", statusOptions)); setMethods(selected("method", methodOptions)); setCurrencies(selected("currency", currencyOptions));
+      setBalanceTypes(selected("balance", ["Available", "Pending"])); setAvailableRange(["Any time", "7 days", "30 days"].includes(params.get("available") ?? "") ? params.get("available")! : "Any time");
+      setRange(restoredRange); setDateMode(restoredRange); setCustomFrom(restoredRange === "Custom" ? from : ""); setCustomTo(restoredRange === "Custom" ? to : "");
+      setMin(validAmount(minValue) && (!maxValue || Number(minValue) <= Number(maxValue)) ? minValue : ""); setMax(validAmount(maxValue) && (!minValue || Number(minValue) <= Number(maxValue)) ? maxValue : "");
+      setSort((["created-desc", "created-asc", "amount-desc", "amount-asc", "status-asc", "status-desc"] as string[]).includes(sortValue) ? sortValue as Sort : "created-desc");
+      setPage(Number.isSafeInteger(pageValue) && pageValue >= 0 ? pageValue : 0); setPageSize([25, 50, 100].includes(sizeValue) ? sizeValue : 25); setUrlReady(true);
+    };
+    restore(); window.addEventListener("popstate", restore);
+    return () => window.removeEventListener("popstate", restore);
+  }, []);
+
+  useEffect(() => {
+    if (!urlReady) return;
+    if (skipUrlWrite.current) { skipUrlWrite.current = false; return; }
+    const params = new URLSearchParams();
+    if (query) params.set("q", query); statuses.forEach(value => params.append("status", value)); methods.forEach(value => params.append("method", value)); currencies.forEach(value => params.append("currency", value)); balanceTypes.forEach(value => params.append("balance", value));
+    if (range !== "30 days") params.set("range", range); if (range === "Custom") { params.set("from", customFrom); params.set("to", customTo); }
+    if (availableRange !== "Any time") params.set("available", availableRange); if (min) params.set("min", min); if (max) params.set("max", max);
+    if (sort !== "created-desc") params.set("sort", sort); if (page) params.set("page", String(page)); if (pageSize !== 25) params.set("pageSize", String(pageSize));
+    const suffix = params.toString(); window.history.replaceState(window.history.state, "", `${window.location.pathname}${suffix ? `?${suffix}` : ""}${window.location.hash}`);
+  }, [urlReady, query, statuses, methods, currencies, balanceTypes, range, customFrom, customTo, availableRange, min, max, sort, page, pageSize]);
 
   const fallbackFiltered = useMemo(() => {
     const days = range === "Today" ? 1 : range === "7 days" ? 7 : range === "30 days" ? 30 : 10000;
@@ -89,6 +133,7 @@ export function PaymentsDashboard() {
   }, [query, statuses, methods, currencies, balanceTypes, range, customFrom, customTo, availableRange, min, max, sort]);
 
   useEffect(() => {
+    if (!urlReady) return;
     const controller = new AbortController();
     const version = ++requestVersion.current;
     const params = new URLSearchParams({ q: query, range, sort, page: String(page), pageSize: String(pageSize) });
@@ -111,7 +156,7 @@ export function PaymentsDashboard() {
       })
       .catch(() => { if (!controller.signal.aborted && version === requestVersion.current) { reportClientError("payment_request_failed"); setError(true); setLoading(false); } });
     return () => controller.abort();
-  }, [query, statuses, methods, currencies, range, customFrom, customTo, min, max, sort, page, pageSize]);
+  }, [urlReady, query, statuses, methods, currencies, range, customFrom, customTo, min, max, sort, page, pageSize]);
 
   const setAndReset = <T,>(setter: (value: T) => void, value: T) => { setter(value); setPage(0); };
   const clientRows = useMemo(
@@ -133,7 +178,7 @@ export function PaymentsDashboard() {
   };
 
   const columns = useMemo<ColumnDef<Payment>[]>(() => [
-    { accessorKey: "id", header: "Payment ID", enableHiding: false, cell: ({ row }) => <div className="id-cell"><button onClick={() => copy(row.original.id)} aria-label={`Copy ${row.original.id}`}>{copied === row.original.id ? <Check size={15}/> : <Copy size={15}/>}</button><span>{row.original.id.slice(0, 17)}…</span></div> },
+    { accessorKey: "id", header: "Payment ID", enableHiding: false, cell: ({ row }) => <div className="id-cell"><button onClick={() => copy(row.original.id)} aria-label={`Copy ${row.original.id}`}>{copied === row.original.id ? <Check size={15}/> : <Copy size={15}/>}</button><Link href={`/payments/${encodeURIComponent(row.original.id)}`}>{row.original.id.slice(0, 17)}…</Link></div> },
     { id: "customer", header: "Customer", enableHiding: false, cell: ({ row }) => <div className="customer"><strong>{row.original.customer.name}</strong><span>{row.original.customer.email}</span></div> },
     { accessorKey: "amount", header: "Amount", cell: ({ row }) => <strong>{formatAmount(row.original.amount, row.original.currency)}</strong> },
     { accessorKey: "currency", header: "Currency", cell: ({ row }) => <span>{row.original.currency}</span> },
@@ -144,7 +189,13 @@ export function PaymentsDashboard() {
     { id: "availableAt", header: "Available at", cell: ({ row }) => <span className="created">{availability(row.original) === "Pending" ? "Pending" : relative(availableAt(row.original))}</span> },
     { id: "more", header: "", enableHiding: false, cell: () => <button className="icon-button" aria-label="More actions"><MoreHorizontal size={18}/></button> },
   ], [copied]);
-  const table = useReactTable({ data: rows, columns, state: { columnVisibility }, onColumnVisibilityChange: setColumnVisibility, getCoreRowModel: getCoreRowModel() });
+  const table = useReactTable({ data: rows, columns, state: { columnVisibility, columnOrder, columnSizing }, onColumnVisibilityChange: setColumnVisibility, onColumnOrderChange: setColumnOrder, onColumnSizingChange: setColumnSizing, columnResizeMode: "onChange", defaultColumn: { minSize: 90, maxSize: 500, size: 150 }, getCoreRowModel: getCoreRowModel() });
+  const moveColumn = (source: string, destination: string) => {
+    const order = table.getAllLeafColumns().map(column => column.id);
+    const from = order.indexOf(source); const to = order.indexOf(destination);
+    if (from < 0 || to < 0 || from === to) return;
+    order.splice(from, 1); order.splice(to, 0, source); setColumnOrder(order);
+  };
   const clear = () => { setQuery(""); setStatuses([]); setMethods([]); setCurrencies([]); setBalanceTypes([]); setRange("30 days"); setDateMode("30 days"); setCustomFrom(""); setCustomTo(""); setAvailableRange("Any time"); setMin(""); setMax(""); setPage(0); };
   const selectTab = (tab: "All" | PaymentStatus) => setAndReset(setStatuses, tab === "All" ? [] : [tab]);
   const hasFilters = Boolean(query || statuses.length || methods.length || currencies.length || balanceTypes.length || min || max || range !== "30 days" || availableRange !== "Any time");
@@ -163,7 +214,7 @@ export function PaymentsDashboard() {
     { panel: "amount", label: "Amount range", value: min || max ? `${min || "0"} – ${max || "∞"}` : "", clear: () => { setMin(""); setMax(""); setPage(0); } },
   ];
 
-  return <main className="app-shell"><aside className="sidebar"><div className="brand"><span>p</span>payme</div><nav><p>WORKSPACE</p><Link href="/home"><House size={17}/>Home</Link><Link className="active" href="/"><CreditCard size={17}/>Payments</Link><Link href="/customers"><Users size={17}/>Customers</Link><Link href="/balances"><Landmark size={17}/>Balances</Link><Link href="/payouts"><Download size={17}/>Payouts</Link><Link href="/products"><Package size={17}/>Products</Link><p>MORE</p><Link href="/settings"><Settings size={17}/>Settings</Link></nav><div className="account"><div className="avatar">PM</div><div><strong>Payme Inc.</strong><span>Admin workspace</span></div><ChevronDown size={16}/></div></aside><section className="content"><header className="topbar"><button className="mobile-menu"><Menu/></button><div className="breadcrumb">Payments <ChevronRight size={15}/> <strong>All payments</strong></div><div className="top-actions"><button className="icon-button" aria-label="Help"><CircleHelp size={19}/></button><button className="icon-button" aria-label="Notifications"><Bell size={19}/></button><button className="create" onClick={() => window.alert("Demo mode: payment creation is ready for API integration.")}><Plus size={17}/>Create payment</button></div></header><div className="page"><div className="title-row"><div><h1>Payments</h1><p>View and manage payments from your customers.</p></div><button className="export" onClick={exportCsv}><Download size={16}/>Export</button></div>
+  return <main className="app-shell"><aside className="sidebar"><div className="brand"><span>p</span>payme</div><nav><p>WORKSPACE</p><Link href="/home"><House size={17}/>Home</Link><Link className="active" href="/"><CreditCard size={17}/>Payments</Link><Link href="/customers"><Users size={17}/>Customers</Link><Link href="/balances"><Landmark size={17}/>Balances</Link><Link href="/payouts"><Download size={17}/>Payouts</Link><Link href="/products"><Package size={17}/>Products</Link><p>MORE</p><Link href="/settings"><Settings size={17}/>Settings</Link></nav><div className="account"><div className="avatar">PM</div><div><strong>Payme Inc.</strong><span>Admin workspace</span></div><ChevronDown size={16}/></div></aside><section className="content"><header className="topbar"><button className="mobile-menu"><Menu/></button><div className="breadcrumb">Payments <ChevronRight size={15}/> <strong>All payments</strong></div><TopBar onSearch={value => setAndReset(setQuery, value)}/><div className="top-actions"><button className="icon-button" aria-label="Help"><CircleHelp size={19}/></button><button className="icon-button" aria-label="Notifications"><Bell size={19}/></button><button className="create" onClick={() => window.alert("Demo mode: payment creation is ready for API integration.")}><Plus size={17}/>Create payment</button></div></header><div className="page"><div className="title-row"><div><h1>Payments</h1><p>View and manage payments from your customers.</p></div><button className="export" onClick={exportCsv}><Download size={16}/>Export</button></div>
     <div className="tabs" aria-label="Payment status">{statusTabs.map(tab => <button key={tab} className={activeTab === tab ? "selected" : ""} onClick={() => selectTab(tab)}>{tab}</button>)}</div>
     <div className="toolbar"><div className="search"><Search size={17}/><input aria-label="Search payments" value={query} onChange={event => setAndReset(setQuery, event.target.value)} placeholder="Search by payment ID, email, or card"/>{query && <button onClick={() => setAndReset(setQuery, "")} aria-label="Clear search"><X size={15}/></button>}</div><MultiSelect label="Method" options={methodOptions} value={methods} onChange={value => setAndReset(setMethods, value)}/>
       <Popover.Root open={moreFiltersOpen} onOpenChange={open => { setMoreFiltersOpen(open); if (open) { setFilterPanel("menu"); setDateMode(range); setDraftFrom(customFrom); setDraftTo(customTo); } }}><Popover.Trigger asChild><button className={`filter-button ${filterCount ? "active" : ""}`}><Filter size={15}/>{filterCount ? `${filterCount} filter${filterCount === 1 ? "" : "s"}` : "More filters"}</button></Popover.Trigger><Popover.Portal><Popover.Content className="filter-popover advanced-popover" side="bottom" align="start" sideOffset={8}>
@@ -176,6 +227,6 @@ export function PaymentsDashboard() {
           {filterPanel === "available" && <label className="control-label">Available within<select value={availableRange} onChange={event => { setAndReset(setAvailableRange, event.target.value); closeFiltersSoon(); }}><option>Any time</option><option>7 days</option><option>30 days</option></select></label>}
           {filterPanel === "amount" && <div className="amounts"><label>Minimum<input inputMode="decimal" placeholder="0.00" value={min} onChange={event => setAndReset(setMin, event.target.value)}/></label><label>Maximum<input inputMode="decimal" placeholder="No maximum" value={max} onChange={event => setAndReset(setMax, event.target.value)}/></label></div>}
         </div>}</Popover.Content></Popover.Portal></Popover.Root><div className="toolbar-spacer"/>
-      <Popover.Root><Popover.Trigger asChild><button className="icon-button columns-trigger" aria-label="Adjust columns"><SlidersHorizontal size={17}/></button></Popover.Trigger><Popover.Portal><Popover.Content className="filter-popover columns-popover" side="bottom" align="end" sideOffset={8}><div className="popover-title">Table settings</div><label className="switch-row">Wrap cell text <input type="checkbox" checked={wrapCells} onChange={event => setWrapCells(event.target.checked)}/><span className="switch"/></label><div className="column-heading">Columns</div>{columnChoices.map(column => <label className="check-option" key={column.id}><input type="checkbox" checked={column.getIsVisible()} onChange={column.getToggleVisibilityHandler()}/><span className="fake-check">{column.getIsVisible() && <Check size={12}/>}</span>{String(column.columnDef.header)}</label>)}<button className="reset-columns" onClick={() => { setColumnVisibility({}); setWrapCells(false); }}>Reset to default</button></Popover.Content></Popover.Portal></Popover.Root></div>
-    {hasFilters && <div className="active-filters"><span>Filters applied</span><button onClick={clear}>Clear all</button></div>}<div className="table-card">{error ? <div className="state"><h3>Couldn’t load payments</h3><p>Check your connection and try again.</p><button onClick={() => window.location.reload()}>Try again</button></div> : total === 0 ? <div className="state"><Search size={25}/><h3>No payments found</h3><p>Try adjusting your filters or search terms.</p><button onClick={clear}>Clear filters</button></div> : <><div className={`table-wrap ${wrapCells ? "wrap-cells" : ""}`}><table><thead>{table.getHeaderGroups().map(group => <tr key={group.id}>{group.headers.map(header => <th key={header.id}>{header.isPlaceholder ? null : ["created", "amount", "status"].includes(header.column.id) ? <button className="sort-head" onClick={() => setAndReset(setSort, sort === `${header.column.id}-desc` ? `${header.column.id}-asc` as Sort : `${header.column.id}-desc` as Sort)}>{flexRender(header.column.columnDef.header, header.getContext())}<ChevronDown size={14}/></button> : flexRender(header.column.columnDef.header, header.getContext())}</th>)}</tr>)}</thead><tbody>{table.getRowModel().rows.map(row => <tr key={row.id}>{row.getVisibleCells().map(cell => <td key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>)}</tr>)}</tbody></table></div><footer className="pagination"><span>Showing <strong>{safePage * pageSize + 1}–{Math.min((safePage + 1) * pageSize, total)}</strong> of <strong>{total}</strong> payments</span><div><select aria-label="Rows per page" value={pageSize} onChange={event => { setPageSize(Number(event.target.value)); setPage(0); }}><option value="25">25 per page</option><option value="50">50 per page</option><option value="100">100 per page</option></select><button disabled={safePage === 0} onClick={() => setPage(safePage - 1)} aria-label="Previous page"><ChevronLeft size={17}/></button><span className="page-count">{safePage + 1} / {totalPages}</span><button disabled={safePage >= totalPages - 1} onClick={() => setPage(safePage + 1)} aria-label="Next page"><ChevronRight size={17}/></button></div></footer></>}</div></div></section></main>;
+      <Popover.Root><Popover.Trigger asChild><button className="icon-button columns-trigger" aria-label="Adjust columns"><SlidersHorizontal size={17}/></button></Popover.Trigger><Popover.Portal><Popover.Content className="filter-popover columns-popover" side="bottom" align="end" sideOffset={8}><div className="popover-title">Table settings</div><label className="switch-row">Wrap cell text <input type="checkbox" checked={wrapCells} onChange={event => setWrapCells(event.target.checked)}/><span className="switch"/></label><div className="column-heading">Columns</div>{columnChoices.map(column => <label className="check-option" key={column.id}><input type="checkbox" checked={column.getIsVisible()} onChange={column.getToggleVisibilityHandler()}/><span className="fake-check">{column.getIsVisible() && <Check size={12}/>}</span>{String(column.columnDef.header)}</label>)}<button className="reset-columns" onClick={() => { setColumnVisibility({}); setColumnOrder([]); setColumnSizing({}); setWrapCells(false); }}>Reset to default</button></Popover.Content></Popover.Portal></Popover.Root></div>
+    {hasFilters && <div className="active-filters"><span>Filters applied</span><button onClick={clear}>Clear all</button></div>}<div className="table-card">{!urlReady || loading ? <div className="state" role="status"><div className="loader"/><p>Loading payments…</p></div> : error ? <div className="state"><h3>Couldn’t load payments</h3><p>Check your connection and try again.</p><button onClick={() => window.location.reload()}>Try again</button></div> : total === 0 ? <div className="state"><Search size={25}/><h3>No payments found</h3><p>Try adjusting your filters or search terms.</p><button onClick={clear}>Clear filters</button></div> : <><div className={`table-wrap ${wrapCells ? "wrap-cells" : ""}`}><table style={{ width: table.getTotalSize(), tableLayout: "fixed" }}><thead>{table.getHeaderGroups().map(group => <tr key={group.id}>{group.headers.map(header => <th key={header.id} style={{ width: header.getSize() }} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); if (draggingColumn.current) moveColumn(draggingColumn.current, header.column.id); draggingColumn.current = null; }}>{header.isPlaceholder ? null : ["created", "amount", "status"].includes(header.column.id) ? <button className="sort-head" onClick={() => setAndReset(setSort, sort === `${header.column.id}-desc` ? `${header.column.id}-asc` as Sort : `${header.column.id}-desc` as Sort)}>{flexRender(header.column.columnDef.header, header.getContext())}<ChevronDown size={14}/></button> : flexRender(header.column.columnDef.header, header.getContext())}<button className="column-drag" draggable aria-label={`Drag ${String(header.column.columnDef.header || "Actions")} column`} title="Drag to reorder" onDragStart={event => { draggingColumn.current = header.column.id; event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", header.column.id); }} onDragEnd={() => { draggingColumn.current = null; }}>⋮⋮</button><span className="column-resize" role="separator" aria-label={`Resize ${String(header.column.columnDef.header || "Actions")} column`} aria-orientation="vertical" tabIndex={0} onMouseDown={header.getResizeHandler()} onTouchStart={header.getResizeHandler()} onKeyDown={event => { if (event.key === "ArrowLeft" || event.key === "ArrowRight") { event.preventDefault(); setColumnSizing(previous => ({ ...previous, [header.column.id]: Math.max(90, Math.min(500, header.getSize() + (event.key === "ArrowRight" ? 10 : -10))) })); } }} onDoubleClick={() => header.column.resetSize()}/></th>)}</tr>)}</thead><tbody>{table.getRowModel().rows.map(row => <tr key={row.id}>{row.getVisibleCells().map(cell => <td key={cell.id} style={{ width: cell.column.getSize() }}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>)}</tr>)}</tbody></table></div><footer className="pagination"><span>Showing <strong>{safePage * pageSize + 1}–{Math.min((safePage + 1) * pageSize, total)}</strong> of <strong>{total}</strong> payments</span><div><select aria-label="Rows per page" value={pageSize} onChange={event => { setPageSize(Number(event.target.value)); setPage(0); }}><option value="25">25 per page</option><option value="50">50 per page</option><option value="100">100 per page</option></select><button disabled={safePage === 0} onClick={() => setPage(safePage - 1)} aria-label="Previous page"><ChevronLeft size={17}/></button><span className="page-count">{safePage + 1} / {totalPages}</span><button disabled={safePage >= totalPages - 1} onClick={() => setPage(safePage + 1)} aria-label="Next page"><ChevronRight size={17}/></button></div></footer></>}</div></div></section></main>;
 }

@@ -79,9 +79,12 @@ The query adapters implement the same `PaymentRepository` contract: `JsonPayment
 - Search by payment ID, customer email, and last four card digits
 - Combined status, payment method, amount, and date filters
 - Date presets and a custom inclusive UTC date range; selected filter values are shown and can be cleared individually
+- Shareable filter, sorting and pagination state in the URL; use browser Back/Forward to restore prior URLs
 - Sorting by date, amount, and status
 - 25 / 50 / 100 item pagination with automatic page correction
 - Currency-aware display, accessible filter popovers, copy-to-clipboard feedback and relative date tooltips
+- Payment details at `/payments/{id}` with the recorded creation event and current status. Status-change timestamps and metadata are explicitly shown as unavailable when absent.
+- Top-bar payment search and a demo account menu; drag column handles to reorder and drag or use the arrow keys on column separators to resize
 - Empty, loading, and retry-ready error state components
 
 No real payment credentials, customer data, or Stripe API calls are used.
@@ -89,8 +92,9 @@ No real payment credentials, customer data, or Stripe API calls are used.
 ## API documentation and security
 
 - OpenAPI contract: `/api/openapi.json`
-- Human-readable API guide: `/api-docs`
-- The API is read-only and validates all query parameters through Zod.
+- Interactive Swagger UI: `/api-docs` (English)
+- `GET /api/payments` lists one validated page; `GET /api/payments/{id}` returns one payment or 404. `POST /api/telemetry` accepts only fixed same-origin error categories.
+- Payment endpoints are read-only and validate their inputs.
 - Pagination is allowlisted to 25, 50, or 100 rows; sort values are allowlisted.
 - Prisma parameterizes database requests; the fixture fallback performs no SQL.
 - Security response headers include CSP, `X-Content-Type-Options`, frame protection, referrer policy and permissions policy.
@@ -102,6 +106,8 @@ No real payment credentials, customer data, or Stripe API calls are used.
 
 - Balance type and available-at are illustrative client-side fields, not stored settlement data; these controls can differ from PostgreSQL if the database and JSON fixture diverge.
 - CSV export includes the currently displayed page. The other workspace screens are demo navigation, not complete Stripe features.
+- Table column order and widths are kept only for the current page session. Filter URLs can contain search text; share them only when that text is safe to disclose.
+- Timeline status-change timestamps and metadata are not present in the synthetic dataset and are not fabricated. The account menu is a demo, not authentication.
 - The OpenAPI endpoint is a lightweight contract; an automated schema-conformance or penetration test has not been performed.
 
 ## Verification
