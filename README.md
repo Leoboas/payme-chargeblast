@@ -50,11 +50,13 @@ data/payments.json         Prisma + PostgreSQL (optional)
 
 ## Data source: JSON by default
 
-The public demo runs with `PAYMENTS_DATA_SOURCE=json` (also the default when the variable is omitted). Its canonical fixture is [data/payments.json](data/payments.json): 800 fictional, validated records. JSON mode does not read `DATABASE_URL`, load Prisma at runtime, connect to Neon, run migrations, or run a seed.
+The application defaults to `PAYMENTS_DATA_SOURCE=json` when the variable is omitted. Its canonical fixture is [data/payments.json](data/payments.json): 800 fictional, validated records. JSON mode does not read `DATABASE_URL`, load Prisma at runtime, connect to Neon, run migrations, or run a seed.
 
 To change demo data, edit a record in `data/payments.json` and restart development or rebuild/redeploy production; the JSON is bundled at build time. The API response includes `source: "json"`, which makes the selected source observable. Invalid records fail Zod validation rather than being silently repaired.
 
 `PAYMENTS_DATA_SOURCE=postgres` is an explicit optional mode. It uses the same query contract through `PostgresPaymentRepository` and requires `DATABASE_URL`. A missing or unavailable database returns a controlled API error; it never falls back to JSON while PostgreSQL mode is selected.
+
+Production is configured with `PAYMENTS_DATA_SOURCE=postgres` against an isolated Neon project. Before activation, all 800 fixture records were seeded and compared field-for-field with PostgreSQL (zero differences); a representative combined-filter query also returned the same total and ordered page from both sources.
 
 ## PostgreSQL / Neon (optional)
 
@@ -103,4 +105,4 @@ npm run build
 npx playwright test
 ```
 
-The JSON parser tests cover an edited fixture record and JSON operation with no `DATABASE_URL`. The compliance matrix, including deliberately untested PostgreSQL parity, is in [docs/chargeblast-compliance-audit.md](docs/chargeblast-compliance-audit.md).
+The JSON parser tests cover an edited fixture record and JSON operation with no `DATABASE_URL`. The compliance matrix is in [docs/chargeblast-compliance-audit.md](docs/chargeblast-compliance-audit.md).
