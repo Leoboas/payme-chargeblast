@@ -5,6 +5,15 @@
 
 .filter-popover[data-side="bottom"] { margin-top: 0; }
 
+.sidebar nav a { text-decoration: none; }
+.advanced-popover { min-width: 300px; max-width: min(360px, calc(100vw - 24px)); }
+.filter-menu-row { display: flex; align-items: center; gap: 4px; }
+.filter-menu-row .filter-menu-item { flex: 1; min-width: 100px; }
+.filter-chip { display: inline-flex; align-items: center; gap: 5px; max-width: 190px; padding: 3px 7px; border: 1px solid #d5d9e3; border-radius: 14px; background: #fff; color: #5149d8; font: 11px Inter, sans-serif; cursor: pointer; }
+.date-filter .control-label input { display: block; width: 100%; margin-top: 6px; padding: 7px; border: 1px solid #d0d5dd; border-radius: 6px; font: inherit; }
+.apply-date { width: calc(100% - 16px); margin: 8px; padding: 8px; border: 0; border-radius: 6px; background: #635bff; color: white; cursor: pointer; }
+.apply-date:disabled { opacity: .5; cursor: not-allowed; }
+
 @keyframes filter-popover-in {
   from { opacity: 0; transform: translateY(-5px) scale(.98); }
   to { opacity: 1; transform: translateY(0) scale(1); }

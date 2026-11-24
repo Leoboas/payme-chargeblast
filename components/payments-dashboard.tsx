@@ -11,11 +11,12 @@ import {
 } from "@tanstack/react-table";
 import {
   Bell, Check, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, Copy,
-  CreditCard, Download, Filter, LayoutGrid, Menu, MoreHorizontal, Plus,
-  Search, Settings, SlidersHorizontal, X,
+  CreditCard, Download, Filter, House, Landmark, Menu, MoreHorizontal, Package, Plus,
+  Search, Settings, SlidersHorizontal, Users, X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatAmount, payments } from "@/lib/payments";
+import { reportClientError } from "@/lib/client-telemetry";
 import type { Payment, PaymentMethod, PaymentStatus } from "@/types/payment";
 
 const statusOptions: PaymentStatus[] = ["Succeeded", "Pending", "Failed", "Refunded"];
@@ -23,7 +24,7 @@ const methodOptions: PaymentMethod[] = ["Card", "PIX", "Bank transfer", "Apple P
 const currencyOptions: Payment["currency"][] = ["USD", "BRL", "EUR", "GBP"];
 const statusTabs: Array<"All" | PaymentStatus> = ["All", "Succeeded", "Failed", "Refunded"];
 type Sort = "created-desc" | "created-asc" | "amount-desc" | "amount-asc" | "status-asc" | "status-desc";
-type FilterPanel = "menu" | "currency" | "type" | "balance" | "created" | "available" | "amount";
+type FilterPanel = "menu" | "status" | "currency" | "type" | "balance" | "created" | "available" | "amount";
 
 function MultiSelect<T extends string>({ label, options, value, onChange }: { label: string; options: T[]; value: T[]; onChange: (value: T[]) => void }) {
   return <Popover.Root><Popover.Trigger asChild><button className={`filter-button ${value.length ? "active" : ""}`}>{label}{value.length ? ` (${value.length})` : ""}<ChevronDown size={15}/></button></Popover.Trigger><Popover.Portal><Popover.Content className="filter-popover" side="bottom" align="start" sideOffset={8}>
@@ -44,6 +45,11 @@ export function PaymentsDashboard() {
   const [balanceTypes, setBalanceTypes] = useState<string[]>([]);
   const [serverData, setServerData] = useState<{ payments: Payment[]; total: number } | null>(null);
   const [range, setRange] = useState("30 days");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+  const [draftFrom, setDraftFrom] = useState("");
+  const [draftTo, setDraftTo] = useState("");
+  const [dateMode, setDateMode] = useState("30 days");
   const [availableRange, setAvailableRange] = useState("Any time");
   const [min, setMin] = useState("");
   const [max, setMax] = useState("");
@@ -61,7 +67,8 @@ export function PaymentsDashboard() {
 
   const fallbackFiltered = useMemo(() => {
     const days = range === "Today" ? 1 : range === "7 days" ? 7 : range === "30 days" ? 30 : 10000;
-    const after = Date.now() - days * 86400000;
+    const after = range === "Custom" ? new Date(`${customFrom}T00:00:00.000Z`).getTime() : Date.now() - days * 86400000;
+    const before = range === "Custom" ? new Date(`${customTo}T00:00:00.000Z`).getTime() + 86400000 : Infinity;
     const term = query.toLowerCase().trim();
     const availableDays = availableRange === "7 days" ? 7 : availableRange === "30 days" ? 30 : 10000;
     const availableAfter = Date.now() - availableDays * 86400000;
@@ -72,14 +79,14 @@ export function PaymentsDashboard() {
       (!currencies.length || currencies.includes(payment.currency)) &&
       (!balanceTypes.length || balanceTypes.includes(availability(payment))) &&
       (!min || payment.amount >= Number(min) * 100) && (!max || payment.amount <= Number(max) * 100) &&
-      payment.created.getTime() >= after && availableAt(payment).getTime() >= availableAfter,
+      payment.created.getTime() >= after && payment.created.getTime() < before && availableAt(payment).getTime() >= availableAfter,
     ).sort((a, b) => {
       const tie = a.id.localeCompare(b.id);
       if (sort.startsWith("created")) return (sort.endsWith("desc") ? b.created.getTime() - a.created.getTime() : a.created.getTime() - b.created.getTime()) || tie;
       if (sort.startsWith("amount")) return (sort.endsWith("desc") ? b.amount - a.amount : a.amount - b.amount) || tie;
       return (sort.endsWith("desc") ? b.status.localeCompare(a.status) : a.status.localeCompare(b.status)) || tie;
     });
-  }, [query, statuses, methods, currencies, balanceTypes, range, availableRange, min, max, sort]);
+  }, [query, statuses, methods, currencies, balanceTypes, range, customFrom, customTo, availableRange, min, max, sort]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -90,6 +97,7 @@ export function PaymentsDashboard() {
     currencies.forEach(value => params.append("currency", value));
     if (min) params.set("min", min);
     if (max) params.set("max", max);
+    if (range === "Custom") { params.set("from", customFrom); params.set("to", customTo); }
     setLoading(true);
     setError(false);
     setServerData(null);
@@ -101,9 +109,9 @@ export function PaymentsDashboard() {
         setError(false);
         setLoading(false);
       })
-      .catch(() => { if (!controller.signal.aborted && version === requestVersion.current) { setError(true); setLoading(false); } });
+      .catch(() => { if (!controller.signal.aborted && version === requestVersion.current) { reportClientError("payment_request_failed"); setError(true); setLoading(false); } });
     return () => controller.abort();
-  }, [query, statuses, methods, currencies, range, min, max, sort, page, pageSize]);
+  }, [query, statuses, methods, currencies, range, customFrom, customTo, min, max, sort, page, pageSize]);
 
   const setAndReset = <T,>(setter: (value: T) => void, value: T) => { setter(value); setPage(0); };
   const clientRows = useMemo(
@@ -118,7 +126,7 @@ export function PaymentsDashboard() {
   const rows = usesClientAdvancedFilter ? clientRows : (serverData?.payments ?? clientRows);
   const activeTab = statuses.length === 1 && statusTabs.includes(statuses[0]) ? statuses[0] : "All";
 
-  const copy = async (id: string) => { await navigator.clipboard.writeText(id); setCopied(id); window.setTimeout(() => setCopied(""), 1400); };
+  const copy = async (id: string) => { try { await navigator.clipboard.writeText(id); setCopied(id); window.setTimeout(() => setCopied(""), 1400); } catch { reportClientError("clipboard_failed"); } };
   const exportCsv = () => {
     const csv = ["Payment ID,Customer,Email,Amount,Status,Method,Created", ...rows.map(payment => [payment.id, payment.customer.name, payment.customer.email, formatAmount(payment.amount, payment.currency), payment.status, payment.method, payment.created.toISOString()].map(value => `"${String(value).replaceAll('"', '""')}"`).join(","))].join("\n");
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); const anchor = document.createElement("a"); anchor.href = url; anchor.download = "payme-payments.csv"; anchor.click(); URL.revokeObjectURL(url);
@@ -132,28 +140,39 @@ export function PaymentsDashboard() {
     { accessorKey: "status", header: "Status", cell: ({ row }) => <StatusBadge status={row.original.status}/> },
     { id: "method", header: "Payment method", cell: ({ row }) => <div className="method"><CreditCard size={16}/><span>{row.original.method === "Card" ? `${row.original.brand} •••• ${row.original.last4}` : row.original.method}</span></div> },
     { id: "balance", header: "Balance type", cell: ({ row }) => <span className="muted-cell">{availability(row.original)}</span> },
-    { accessorKey: "created", header: "Created", cell: ({ row }) => <span className="created" title={row.original.created.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}>{relative(row.original.created)}</span> },
+    { accessorKey: "created", header: "Created", cell: ({ row }) => <span className="created" title={relative(row.original.created)}>{row.original.created.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" })} UTC</span> },
     { id: "availableAt", header: "Available at", cell: ({ row }) => <span className="created">{availability(row.original) === "Pending" ? "Pending" : relative(availableAt(row.original))}</span> },
     { id: "more", header: "", enableHiding: false, cell: () => <button className="icon-button" aria-label="More actions"><MoreHorizontal size={18}/></button> },
   ], [copied]);
   const table = useReactTable({ data: rows, columns, state: { columnVisibility }, onColumnVisibilityChange: setColumnVisibility, getCoreRowModel: getCoreRowModel() });
-  const clear = () => { setQuery(""); setStatuses([]); setMethods([]); setCurrencies([]); setBalanceTypes([]); setRange("30 days"); setAvailableRange("Any time"); setMin(""); setMax(""); setPage(0); };
+  const clear = () => { setQuery(""); setStatuses([]); setMethods([]); setCurrencies([]); setBalanceTypes([]); setRange("30 days"); setDateMode("30 days"); setCustomFrom(""); setCustomTo(""); setAvailableRange("Any time"); setMin(""); setMax(""); setPage(0); };
   const selectTab = (tab: "All" | PaymentStatus) => setAndReset(setStatuses, tab === "All" ? [] : [tab]);
   const hasFilters = Boolean(query || statuses.length || methods.length || currencies.length || balanceTypes.length || min || max || range !== "30 days" || availableRange !== "Any time");
 
   const toggle = <T extends string,>(items: T[], setter: (value: T[]) => void, item: T) => setter(items.includes(item) ? items.filter(value => value !== item) : [...items, item]);
   const closeFiltersSoon = () => window.setTimeout(() => setMoreFiltersOpen(false), 0);
   const columnChoices = table.getAllLeafColumns().filter(column => column.getCanHide());
+  const filterCount = Number(statuses.length > 0) + Number(currencies.length > 0) + Number(methods.length > 0) + Number(balanceTypes.length > 0) + Number(range !== "30 days") + Number(availableRange !== "Any time") + Number(Boolean(min || max));
+  const filterItems: Array<{ panel: FilterPanel; label: string; value: string; clear: () => void }> = [
+    { panel: "status", label: "Status", value: statuses.join(", "), clear: () => setAndReset(setStatuses, []) },
+    { panel: "currency", label: "Currency", value: currencies.join(", "), clear: () => setAndReset(setCurrencies, []) },
+    { panel: "type", label: "Type", value: methods.join(", "), clear: () => setAndReset(setMethods, []) },
+    { panel: "balance", label: "Balance type", value: balanceTypes.join(", "), clear: () => setAndReset(setBalanceTypes, []) },
+    { panel: "created", label: "Created at", value: range === "30 days" ? "" : range === "Custom" ? `${customFrom} – ${customTo}` : range, clear: () => { setAndReset(setRange, "30 days"); setDateMode("30 days"); } },
+    { panel: "available", label: "Available at", value: availableRange === "Any time" ? "" : availableRange, clear: () => setAndReset(setAvailableRange, "Any time") },
+    { panel: "amount", label: "Amount range", value: min || max ? `${min || "0"} – ${max || "∞"}` : "", clear: () => { setMin(""); setMax(""); setPage(0); } },
+  ];
 
-  return <main className="app-shell"><aside className="sidebar"><div className="brand"><span>p</span>payme</div><nav><p>WORKSPACE</p><Link href="/home"><LayoutGrid size={17}/>Home</Link><Link className="active" href="/"><CreditCard size={17}/>Payments</Link><Link href="/payouts"><Download size={17}/>Payouts</Link><Link href="/products"><SlidersHorizontal size={17}/>Products</Link><p>MORE</p><Link href="/settings"><Settings size={17}/>Settings</Link></nav><div className="account"><div className="avatar">PM</div><div><strong>Payme Inc.</strong><span>Admin workspace</span></div><ChevronDown size={16}/></div></aside><section className="content"><header className="topbar"><button className="mobile-menu"><Menu/></button><div className="breadcrumb">Payments <ChevronRight size={15}/> <strong>All payments</strong></div><div className="top-actions"><button className="icon-button" aria-label="Help"><CircleHelp size={19}/></button><button className="icon-button" aria-label="Notifications"><Bell size={19}/></button><button className="create" onClick={() => window.alert("Demo mode: payment creation is ready for API integration.")}><Plus size={17}/>Create payment</button></div></header><div className="page"><div className="title-row"><div><h1>Payments</h1><p>View and manage payments from your customers.</p></div><button className="export" onClick={exportCsv}><Download size={16}/>Export</button></div>
+  return <main className="app-shell"><aside className="sidebar"><div className="brand"><span>p</span>payme</div><nav><p>WORKSPACE</p><Link href="/home"><House size={17}/>Home</Link><Link className="active" href="/"><CreditCard size={17}/>Payments</Link><Link href="/customers"><Users size={17}/>Customers</Link><Link href="/balances"><Landmark size={17}/>Balances</Link><Link href="/payouts"><Download size={17}/>Payouts</Link><Link href="/products"><Package size={17}/>Products</Link><p>MORE</p><Link href="/settings"><Settings size={17}/>Settings</Link></nav><div className="account"><div className="avatar">PM</div><div><strong>Payme Inc.</strong><span>Admin workspace</span></div><ChevronDown size={16}/></div></aside><section className="content"><header className="topbar"><button className="mobile-menu"><Menu/></button><div className="breadcrumb">Payments <ChevronRight size={15}/> <strong>All payments</strong></div><div className="top-actions"><button className="icon-button" aria-label="Help"><CircleHelp size={19}/></button><button className="icon-button" aria-label="Notifications"><Bell size={19}/></button><button className="create" onClick={() => window.alert("Demo mode: payment creation is ready for API integration.")}><Plus size={17}/>Create payment</button></div></header><div className="page"><div className="title-row"><div><h1>Payments</h1><p>View and manage payments from your customers.</p></div><button className="export" onClick={exportCsv}><Download size={16}/>Export</button></div>
     <div className="tabs" aria-label="Payment status">{statusTabs.map(tab => <button key={tab} className={activeTab === tab ? "selected" : ""} onClick={() => selectTab(tab)}>{tab}</button>)}</div>
     <div className="toolbar"><div className="search"><Search size={17}/><input aria-label="Search payments" value={query} onChange={event => setAndReset(setQuery, event.target.value)} placeholder="Search by payment ID, email, or card"/>{query && <button onClick={() => setAndReset(setQuery, "")} aria-label="Clear search"><X size={15}/></button>}</div><MultiSelect label="Method" options={methodOptions} value={methods} onChange={value => setAndReset(setMethods, value)}/>
-      <Popover.Root open={moreFiltersOpen} onOpenChange={open => { setMoreFiltersOpen(open); if (open) setFilterPanel("menu"); }}><Popover.Trigger asChild><button className={`filter-button ${currencies.length || balanceTypes.length || min || max || range !== "30 days" || availableRange !== "Any time" ? "active" : ""}`}><Filter size={15}/>More filters</button></Popover.Trigger><Popover.Portal><Popover.Content className="filter-popover advanced-popover" side="bottom" align="start" sideOffset={8}>
-        {filterPanel === "menu" ? <><div className="popover-title">Filter</div><button className="filter-menu-item" onClick={() => setFilterPanel("currency")}>Currency <ChevronRight size={15}/></button><button className="filter-menu-item" onClick={() => setFilterPanel("type")}>Type <ChevronRight size={15}/></button><button className="filter-menu-item" onClick={() => setFilterPanel("balance")}>Balance type <ChevronRight size={15}/></button><button className="filter-menu-item" onClick={() => setFilterPanel("created")}>Created at <ChevronRight size={15}/></button><button className="filter-menu-item" onClick={() => setFilterPanel("available")}>Available at <ChevronRight size={15}/></button><button className="filter-menu-item" onClick={() => setFilterPanel("amount")}>Amount range <ChevronRight size={15}/></button></> : <div className="advanced-panel"><button className="panel-back" onClick={() => setFilterPanel("menu")}><ChevronLeft size={17}/>{filterPanel === "type" ? "Type" : filterPanel === "balance" ? "Balance type" : filterPanel === "created" ? "Created at" : filterPanel === "available" ? "Available at" : filterPanel === "amount" ? "Amount range" : "Currency"}</button>
+      <Popover.Root open={moreFiltersOpen} onOpenChange={open => { setMoreFiltersOpen(open); if (open) { setFilterPanel("menu"); setDateMode(range); setDraftFrom(customFrom); setDraftTo(customTo); } }}><Popover.Trigger asChild><button className={`filter-button ${filterCount ? "active" : ""}`}><Filter size={15}/>{filterCount ? `${filterCount} filter${filterCount === 1 ? "" : "s"}` : "More filters"}</button></Popover.Trigger><Popover.Portal><Popover.Content className="filter-popover advanced-popover" side="bottom" align="start" sideOffset={8}>
+        {filterPanel === "menu" ? <><div className="popover-title">Filter</div>{filterItems.map(item => <div className="filter-menu-row" key={item.panel}><button className="filter-menu-item" onClick={() => setFilterPanel(item.panel)}>{item.label}{!item.value && <ChevronRight size={15}/>}</button>{item.value && <button className="filter-chip" aria-label={`Clear ${item.label} filter`} onClick={item.clear}>{item.value}<X size={12}/></button>}</div>)}</> : <div className="advanced-panel"><button className="panel-back" onClick={() => setFilterPanel("menu")}><ChevronLeft size={17}/>{filterPanel === "status" ? "Status" : filterPanel === "type" ? "Type" : filterPanel === "balance" ? "Balance type" : filterPanel === "created" ? "Created at" : filterPanel === "available" ? "Available at" : filterPanel === "amount" ? "Amount range" : "Currency"}</button>
+          {filterPanel === "status" && statusOptions.map(option => <label className="check-option" key={option}><input type="checkbox" checked={statuses.includes(option)} onChange={() => { toggle(statuses, setStatuses, option); setPage(0); }}/><span className="fake-check">{statuses.includes(option) && <Check size={12}/>}</span>{option}</label>)}
           {filterPanel === "currency" && currencyOptions.map(option => <label className="check-option" key={option}><input type="checkbox" checked={currencies.includes(option)} onChange={() => { toggle(currencies, setCurrencies, option); setPage(0); closeFiltersSoon(); }}/><span className="fake-check">{currencies.includes(option) && <Check size={12}/>}</span>{option}</label>)}
           {filterPanel === "type" && methodOptions.map(option => <label className="check-option" key={option}><input type="checkbox" checked={methods.includes(option)} onChange={() => { toggle(methods, setMethods, option); setPage(0); closeFiltersSoon(); }}/><span className="fake-check">{methods.includes(option) && <Check size={12}/>}</span>{option}</label>)}
           {filterPanel === "balance" && ["Available", "Pending"].map(option => <label className="check-option" key={option}><input type="checkbox" checked={balanceTypes.includes(option)} onChange={() => { toggle(balanceTypes, setBalanceTypes, option); setPage(0); closeFiltersSoon(); }}/><span className="fake-check">{balanceTypes.includes(option) && <Check size={12}/>}</span>{option}</label>)}
-          {filterPanel === "created" && <label className="control-label">Created within<select value={range} onChange={event => { setAndReset(setRange, event.target.value); closeFiltersSoon(); }}><option>Today</option><option>7 days</option><option>30 days</option><option>Custom</option></select></label>}
+          {filterPanel === "created" && <div className="date-filter"><label className="control-label">Created within<select value={dateMode} onChange={event => { const value = event.target.value; setDateMode(value); if (value !== "Custom") { setAndReset(setRange, value); closeFiltersSoon(); } }}><option>Today</option><option>7 days</option><option>30 days</option><option>Custom</option></select></label>{dateMode === "Custom" && <><label className="control-label">From (UTC)<input type="date" value={draftFrom} onChange={event => setDraftFrom(event.target.value)}/></label><label className="control-label">To (UTC)<input type="date" value={draftTo} min={draftFrom || undefined} onChange={event => setDraftTo(event.target.value)}/></label><button className="apply-date" disabled={!draftFrom || !draftTo || draftFrom > draftTo} onClick={() => { setCustomFrom(draftFrom); setCustomTo(draftTo); setAndReset(setRange, "Custom"); closeFiltersSoon(); }}>Apply</button></>}</div>}
           {filterPanel === "available" && <label className="control-label">Available within<select value={availableRange} onChange={event => { setAndReset(setAvailableRange, event.target.value); closeFiltersSoon(); }}><option>Any time</option><option>7 days</option><option>30 days</option></select></label>}
           {filterPanel === "amount" && <div className="amounts"><label>Minimum<input inputMode="decimal" placeholder="0.00" value={min} onChange={event => setAndReset(setMin, event.target.value)}/></label><label>Maximum<input inputMode="decimal" placeholder="No maximum" value={max} onChange={event => setAndReset(setMax, event.target.value)}/></label></div>}
         </div>}</Popover.Content></Popover.Portal></Popover.Root><div className="toolbar-spacer"/>

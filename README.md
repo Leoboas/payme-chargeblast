@@ -78,6 +78,7 @@ The query adapters implement the same `PaymentRepository` contract: `JsonPayment
 
 - Search by payment ID, customer email, and last four card digits
 - Combined status, payment method, amount, and date filters
+- Date presets and a custom inclusive UTC date range; selected filter values are shown and can be cleared individually
 - Sorting by date, amount, and status
 - 25 / 50 / 100 item pagination with automatic page correction
 - Currency-aware display, accessible filter popovers, copy-to-clipboard feedback and relative date tooltips
@@ -93,13 +94,13 @@ No real payment credentials, customer data, or Stripe API calls are used.
 - Pagination is allowlisted to 25, 50, or 100 rows; sort values are allowlisted.
 - Prisma parameterizes database requests; the fixture fallback performs no SQL.
 - Security response headers include CSP, `X-Content-Type-Options`, frame protection, referrer policy and permissions policy.
+- Structured server error events and fixed browser error categories are written to platform logs. They omit customer details, search text, request URLs and raw error messages. On Vercel, inspect the project's runtime logs; retention follows the platform plan, and this is not a dedicated error-monitoring service.
 
 `npm audit --omit=dev --audit-level=high` reports zero production vulnerabilities after the Next 16, Zod 4 and Prisma 7 upgrades. Prisma's `effect` transitive dependency is pinned through the npm `overrides` field to its patched release.
 
 ## Known limitations
 
 - Balance type and available-at are illustrative client-side fields, not stored settlement data; these controls can differ from PostgreSQL if the database and JSON fixture diverge.
-- The `Custom` date choice currently selects a broad range rather than a user-defined start and end date.
 - CSV export includes the currently displayed page. The other workspace screens are demo navigation, not complete Stripe features.
 - The OpenAPI endpoint is a lightweight contract; an automated schema-conformance or penetration test has not been performed.
 

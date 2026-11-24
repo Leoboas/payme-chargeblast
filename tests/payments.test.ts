@@ -19,7 +19,7 @@ describe("payment fixture", () => {
     expect(parsed[0]).toMatchObject({ amount: 98765, status: "Succeeded", method: "PIX", customer: { name: "Fixture Edit" } });
   });
   it("queries JSON without DATABASE_URL and keeps PostgreSQL opt-in", async () => {
-    const page = await getPaymentRepository("json").query(parseQuery(new URLSearchParams("range=Custom&pageSize=25")));
+    const page = await getPaymentRepository("json").query(parseQuery(new URLSearchParams("range=Custom&from=2000-01-01&to=2099-12-31&pageSize=25")));
     expect(page.source).toBe("json");
     expect(page.total).toBe(800);
     await expect(getPaymentRepository("postgres").query(parseQuery(new URLSearchParams()))).rejects.toThrow("DATABASE_URL is required");
@@ -29,12 +29,12 @@ describe("payment fixture", () => {
     const moved = { ...payments[0], id: "pi_jsonchangedpayme", status: "Succeeded" as const, customer: { name: "JSON Added", email: "json.added@example.com" } };
     changed.push(moved);
     const repository = new JsonPaymentRepository(changed);
-    const succeeded = await repository.query(parseQuery(new URLSearchParams("status=Succeeded&q=json.added@example.com&range=Custom&pageSize=25")));
+    const succeeded = await repository.query(parseQuery(new URLSearchParams("status=Succeeded&q=json.added@example.com&range=Custom&from=2000-01-01&to=2099-12-31&pageSize=25")));
     expect(succeeded.total).toBe(1);
     expect(succeeded.payments[0].id).toBe("pi_jsonchangedpayme");
-    const deleted = await repository.query(parseQuery(new URLSearchParams(`q=${payments[0].id}&range=Custom&pageSize=25`)));
+    const deleted = await repository.query(parseQuery(new URLSearchParams(`q=${payments[0].id}&range=Custom&from=2000-01-01&to=2099-12-31&pageSize=25`)));
     expect(deleted.total).toBe(0);
-    const page = await repository.query(parseQuery(new URLSearchParams("range=Custom&pageSize=100&page=1")));
+    const page = await repository.query(parseQuery(new URLSearchParams("range=Custom&from=2000-01-01&to=2099-12-31&pageSize=100&page=1")));
     expect(page.payments).toHaveLength(1);
   });
 });

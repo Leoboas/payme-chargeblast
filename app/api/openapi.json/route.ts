@@ -16,6 +16,8 @@ export function GET() {
             queryParameter("method", { type: "array", items: { type: "string", enum: ["Card", "PIX", "Bank transfer", "Apple Pay"] } }),
             queryParameter("currency", { type: "array", items: { type: "string", enum: ["USD", "BRL", "EUR", "GBP"] } }),
             queryParameter("range", { type: "string", enum: ["Today", "7 days", "30 days", "Custom"], default: "30 days" }),
+            queryParameter("from", { type: "string", format: "date", description: "Inclusive UTC start date; required for Custom" }),
+            queryParameter("to", { type: "string", format: "date", description: "Inclusive UTC end date; required for Custom" }),
             queryParameter("min", { type: "number", minimum: 0 }), queryParameter("max", { type: "number", minimum: 0 }),
             queryParameter("sort", { type: "string", enum: ["created-desc", "created-asc", "amount-desc", "amount-asc", "status-asc", "status-desc"] }),
             queryParameter("page", { type: "integer", minimum: 0, default: 0 }), queryParameter("pageSize", { type: "integer", enum: [25, 50, 100], default: 25 })
