@@ -60,7 +60,7 @@ Production is configured with `PAYMENTS_DATA_SOURCE=postgres` against an isolate
 
 ## PostgreSQL / Neon (optional)
 
-Set the values in `.env.example` in a local `.env` file. `DATABASE_URL` must be a Neon pooled connection for runtime; `DIRECT_URL` must be the direct connection used by Prisma migrations.
+Set the values in `.env.example` in a local `.env` file. `DATABASE_URL` must be a Neon pooled connection for runtime; `DIRECT_URL` must be the direct connection used by Prisma migrations. Prisma 7 uses the PostgreSQL driver adapter at runtime and `prisma7.config.ts` for CLI migrations.
 
 ```bash
 npm run db:generate
@@ -94,7 +94,7 @@ No real payment credentials, customer data, or Stripe API calls are used.
 - Prisma parameterizes database requests; the fixture fallback performs no SQL.
 - Security response headers include CSP, `X-Content-Type-Options`, frame protection, referrer policy and permissions policy.
 
-`npm audit --omit=dev --audit-level=high` reports 7 transitive advisories (6 high, 1 moderate) in Next.js/PostCSS, Prisma dependencies, and Zod. Available automated fixes require breaking major upgrades; no `--force` upgrade was applied before delivery.
+`npm audit --omit=dev --audit-level=high` reports zero production vulnerabilities after the Next 16, Zod 4 and Prisma 7 upgrades. Prisma's `effect` transitive dependency is pinned through the npm `overrides` field to its patched release.
 
 ## Verification
 

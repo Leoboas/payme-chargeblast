@@ -1,6 +1,9 @@
 import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 
-const prisma = new PrismaClient();
+if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is required to seed PostgreSQL");
+const connectionString = process.env.DATABASE_URL.replace(/([?&])sslmode=require(?=(&|$))/, "$1sslmode=verify-full");
+const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 const names = ["Ana Martins", "Lucas Rocha", "Maya Thompson", "Diego Alves", "Olivia Chen", "Rafael Costa", "Emma Wilson", "Noah Santos", "Sofia Lima", "Theo Walker", "Camila Ribeiro", "Arthur Lee"];
 const statuses = ["Succeeded", "Succeeded", "Succeeded", "Pending", "Failed", "Refunded"];
 const methods = ["Card", "Card", "Card", "PIX", "Bank transfer", "Apple Pay"];

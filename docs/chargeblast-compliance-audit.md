@@ -11,4 +11,4 @@
 | JSON/Postgres parity | Same 800 deterministic records in the fixture and Neon | Full field-for-field record comparison plus combined-filter query comparison | PASS | 800 JSON / 800 PostgreSQL / 0 differences; matching total and ordered page |
 | Visual Stripe comparison | Existing reference-driven layout and popovers | Manual review plus local Playwright capture | PASS | `tests/e2e/payments.spec.ts` |
 | Full custom date calendar / Apply counter | Current UI uses range selector and active state | Not implemented | NOT_APPLICABLE | Avoided beyond Payments challenge scope |
-| Security regression and dependency audit | Zod validation, allowlists, headers | Unit tests plus `npm audit --omit=dev --audit-level=high` | FAIL | 6 high transitive advisories require breaking Next/Prisma/Zod upgrades |
+| Security regression and dependency audit | Zod validation, allowlists, headers, Next 16 and Prisma 7 | Unit tests plus `npm audit --omit=dev --audit-level=high` | PASS | 0 production vulnerabilities after the patched `effect` override |
