@@ -16,7 +16,7 @@ Open `http://localhost:3000`.
 - `npm run dev` — local development server
 - `npm run build` — production build and type validation
 - `npm run lint` — lint the project
-- `npm run test` — execute unit tests when added
+- `npm run test` — execute unit tests
 
 ## Architecture
 
@@ -72,7 +72,7 @@ The seed uses `createMany` with stable payment IDs and `skipDuplicates`, so it i
 
 The indexes mirror the dashboard access paths: date/status/method with date sorting, amount sorting, and email search. A standard view is intentionally not used: it would simplify neither this single-table read model nor its performance.
 
-The query adapters implement the same `PaymentRepository` contract: `JsonPaymentRepository` and `PostgresPaymentRepository`. The frontend only consumes `/api/payments` and does not know which adapter is active.
+The query adapters implement the same `PaymentRepository` contract: `JsonPaymentRepository` and `PostgresPaymentRepository`. Required filters use `/api/payments`. The demo's extra balance-type and available-at controls currently calculate values from the local fixture, rather than querying PostgreSQL; availability and the two-day date are illustrative and are not real settlement data.
 
 ## Features
 
@@ -95,6 +95,13 @@ No real payment credentials, customer data, or Stripe API calls are used.
 - Security response headers include CSP, `X-Content-Type-Options`, frame protection, referrer policy and permissions policy.
 
 `npm audit --omit=dev --audit-level=high` reports zero production vulnerabilities after the Next 16, Zod 4 and Prisma 7 upgrades. Prisma's `effect` transitive dependency is pinned through the npm `overrides` field to its patched release.
+
+## Known limitations
+
+- Balance type and available-at are illustrative client-side fields, not stored settlement data; these controls can differ from PostgreSQL if the database and JSON fixture diverge.
+- The `Custom` date choice currently selects a broad range rather than a user-defined start and end date.
+- CSV export includes the currently displayed page. The other workspace screens are demo navigation, not complete Stripe features.
+- The OpenAPI endpoint is a lightweight contract; an automated schema-conformance or penetration test has not been performed.
 
 ## Verification
 
